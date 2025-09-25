@@ -196,7 +196,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
-        /*Camera test activity*/
+        /*Camera test*/
 
         Camer_test = findViewById(R.id.Camer_test);
 
