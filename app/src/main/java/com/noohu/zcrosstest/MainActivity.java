@@ -229,7 +229,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        /*PIR_test test*/
+        /*PIR test */
 
         PIR_starttest = findViewById(R.id.PIR_starttest);
         PIR_stoptest = findViewById(R.id.PIR_stoptest);
