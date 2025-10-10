@@ -60,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
     private MediaRecorder recorder = null;
 
 
-    /*Binds controller service*/
+    /*Binds Variable*/
     private IAdcService iADC = null;
     private ITemperatureFanService iTmp = null;
 
