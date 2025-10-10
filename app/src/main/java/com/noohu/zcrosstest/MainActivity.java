@@ -2,8 +2,14 @@ package com.noohu.zcrosstest;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioDeviceInfo;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.RemoteException;
@@ -27,6 +33,7 @@ import com.noohu.zcrosstest.Services.MicBindService;
 import com.noohu.zcrosstest.Services.PIRBindService;
 
 import java.io.File;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,6 +44,7 @@ import java.util.Locale;
 import vendor.zumi.adc.IAdcService;
 import vendor.zumi.fancontrol.ITemperatureFanService;
 import vendor.zumi.ledcontrol.ILEDService;
+import vendor.zumi.miccontroller.IMicController;
 import vendor.zumi.micrecorder.IMicRecorder;
 import vendor.zumi.pircontrol.IPIRService;
 
@@ -48,6 +56,8 @@ public class MainActivity extends AppCompatActivity {
 
     public String selectedChannelNum = "Channel-1";
     private boolean isRecording = false;
+    private File recordFile = null;
+    private MediaRecorder recorder = null;
 
 
     /*Binds*/
@@ -55,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
     private ITemperatureFanService iTmp = null;
 
     private ILEDService iLed = null;
-    private IMicRecorder iMic = null;
+    private IMicController iMic = null;
     private IPIRService iPIR = null;
 
 
@@ -65,6 +75,13 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        iMic = MicBindService.getBind();
+        try {
+            boolean muted = iMic.isMuted();
+            Toast.makeText(getApplicationContext(), muted?"volume muted":"volume Not muted", Toast.LENGTH_LONG).show();
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
+        }
         /*ADC TEST*/
         ADC_test = findViewById(R.id.ADC_test);
         ListView adcListView = findViewById(R.id.adcListView);
@@ -103,7 +120,7 @@ public class MainActivity extends AppCompatActivity {
         ChannelSelection();
         recordButton.setOnClickListener(v -> {
 
-            iMic = MicBindService.getBind();
+
             // Get current timestamp
             String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
 
@@ -113,11 +130,70 @@ public class MainActivity extends AppCompatActivity {
             // File path in Downloads folder
             File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName);
             String path = file.getAbsolutePath();
+            Log.d("ZumiTesting", "isRecording clicked");
 
             if (!isRecording) {
-
-                isRecording = true;
                 String[] parts = selectedChannelNum.split("-");
+
+                int Channelnumber = Integer.parseInt(parts[1]);
+
+                Log.d("ZumiTesting", "isRecording if");
+                recorder = new MediaRecorder();
+                Log.d("ZumiTesting", "recorde itialized");
+
+                int[] channelConfigs = {AudioFormat.CHANNEL_IN_MONO, AudioFormat.CHANNEL_IN_STEREO};
+
+                for (int config : channelConfigs) {
+                    int bufferSize = AudioRecord.getMinBufferSize(48000, config, AudioFormat.ENCODING_PCM_32BIT);
+                    if (bufferSize > 0) {
+                        Log.d("ZumiTesting", "Supported channel config: " + config);
+                    }
+                }
+
+                recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+                Log.d("ZumiTesting", "Mic setting");
+
+                recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                Log.d("ZumiTesting", "OutputFormat MPEG_4 setting");
+
+                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+                Log.d("ZumiTesting", "AudioEncoder AAC setting");
+                try {
+                    iMic.setMicfilDataline( Channelnumber);
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+                //recorder.setAudioChannels(Channelnumber);
+                Log.d("ZumiTesting", "setAudioChannels selection setting");
+
+                recorder.setAudioSamplingRate(48000);
+                Log.d("ZumiTesting", "setAudioSamplingRate 48000 setting");
+
+                recorder.setAudioEncodingBitRate(32);
+                Log.d("ZumiTesting", "setAudioEncodingBitRate 32 setting");
+
+                recorder.setMaxDuration(-1); // unlimited duration
+                Log.d("ZumiTesting", "setMaxDuration unlimited setting");
+
+                recorder.setOutputFile(path);
+                Log.d("ZumiTesting", "setOutputFile  setting");
+
+
+                try {
+                    recorder.prepare();
+                    Log.d("ZumiTesting", " recorder.prepare();  setting");
+
+                    recorder.start();
+                    Log.d("ZumiTesting", " recorder.start();  setting");
+
+                    isRecording = true;
+
+                } catch (IOException | IllegalStateException e) {
+                    Log.e("ZumiTesting", "Recorder failed: " + e.getMessage());
+
+                }
+
+                /*String[] parts = selectedChannelNum.split("-");
                 if (parts.length == 2) {
                     int Channelnumber = Integer.parseInt(parts[1]);
                     try {
@@ -126,14 +202,24 @@ public class MainActivity extends AppCompatActivity {
                     } catch (RemoteException e) {
                         throw new RuntimeException(e);
                     }
-                }
+                }*/
 
                 recordButton.setText("Stop Recording");
             } else {
-                try {
+               /* try {
                     iMic.stopRecording();
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
+                }*/
+
+                if (recorder != null) {
+                    try {
+                        recorder.stop();
+                        recorder.reset();
+                        recorder.release();
+                    } catch (IllegalStateException ignored) {
+                    }
+                    recorder = null;
                 }
                 isRecording = false;
                 recordButton.setText("Start Recording");
@@ -206,7 +292,14 @@ public class MainActivity extends AppCompatActivity {
         });
 
 
+        AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        AudioDeviceInfo[] devices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS);
 
+        for (AudioDeviceInfo device : devices) {
+            int type = device.getType();
+            String name = device.getProductName().toString();
+            Log.d("MicInfo", "Device Type: " + type + " Name: " + name);
+        }
         /*Led test*/
 
         led_edtx = findViewById(R.id.led_edtx);
@@ -282,10 +375,15 @@ public class MainActivity extends AppCompatActivity {
     /*Audio Controller*/
     private void ChannelSelection() {
         List<String> ChannelLabels = new ArrayList<>();
+        ChannelLabels.add("Mic-0");
         ChannelLabels.add("Mic-1");
         ChannelLabels.add("Mic-2");
         ChannelLabels.add("Mic-3");
         ChannelLabels.add("Mic-4");
+        ChannelLabels.add("Mic-5");
+        ChannelLabels.add("Mic-6");
+        ChannelLabels.add("Mic-7");
+        ChannelLabels.add("Mic-8");
 
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,

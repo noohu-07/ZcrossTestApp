@@ -3,13 +3,14 @@ package com.noohu.zcrosstest.Services;
 import android.os.IBinder;
 import android.util.Log;
 
+import vendor.zumi.miccontroller.IMicController;
 import vendor.zumi.micrecorder.IMicRecorder;
 
 public class MicBindService {
     private static final String TAG = "NoohuTesting";
-    private static final String SERVICE_NAME = "vendor.zumi.micrecorder.IMicRecorder/default";
+    private static final String SERVICE_NAME = "vendor.zumi.miccontroller.IMicController/default";
 
-    public static IMicRecorder getBind() {
+    public static IMicController getBind() {
         try {
             // Load android.os.ServiceManager class
             Class<?> serviceManager = Class.forName("android.os.ServiceManager");
@@ -32,7 +33,7 @@ public class MicBindService {
             Log.d(TAG, "Local AIDL descriptor: " + IMicRecorder.Stub.DESCRIPTOR);
 
             // Bind to the remote service
-            return IMicRecorder.Stub.asInterface(binder);
+            return IMicController.Stub.asInterface(binder);
 
         } catch (Exception e) {
             Log.e(TAG, "Error accessing IMicRecorder: " + e.getMessage(), e);
